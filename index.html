@@ -156,78 +156,184 @@
   var pw=document.getElementById('pw'), ok=document.getElementById('ok'), err=document.getElementById('err');
   var v=document.getElementById('v'), cover=document.getElementById('cover');
 
-  // —— 加密静态版（GitHub Pages）——
-  // 公开仓库里只有加密后的 video.enc；密码在浏览器里派生密钥、本地解密播放。
-  var CFG={"salt": "xGgc8LNyB4QJr8H9ErzOVg==", "iter": 150000, "chkIv": "lluQl2HoMsjDlWYu", "chk": "Cch7RalAhOMmjIywj/XJVrUvvx2xM9YLvA==", "vidIv": "y9oZuVE8dCY1f8y/"};
+  // —— 加密分段版（GitHub Pages）：边下边播 ——
+  var CFG={"salt":"5K/yagxEhMTwjg6CxaMsfQ==","iter":150000,"ivb":"qHmwpgIkeG0=","chk":"zWWPIZkMhBBVNJkiv9Mg5TfJlJAMgxKONg==","n":63,"durs":[4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0,3.433],"sizes":[1406,246490,216647,190376,237510,201300,196671,237167,225170,184489,200103,182849,206361,176598,244545,201668,226174,180208,197033,214651,199843,185137,190152,188039,236207,183207,213784,189213,184232,182264,202682,219640,200011,224757,180076,187852,166504,225082,225786,236270,189503,216999,180177,245870,234155,227365,218108,233111,214622,229754,219314,219087,243188,217823,247721,241539,250007,233484,177248,230231,184236,218868,187534,159453],"mime":"video/mp4; codecs=\"avc1.4d401f, mp4a.40.2\""};
   var MSG_WRONG='密码不太对，再试一次 ♥';
+  var N=CFG.n, TOTAL=CFG.durs.reduce(function(a,b){return a+b;},0);
+  var TOTAL_BYTES=CFG.sizes.reduce(function(a,b){return a+b;},0);
   function showErr(msg){ err.textContent=msg; err.classList.add('show'); ok.disabled=false; pw.select(); }
   function hint(t){ var h=document.querySelector('#cover .hint'); if(h) h.textContent=t; }
   function ub64(s){ var b=atob(s),u=new Uint8Array(b.length); for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i); return u; }
-  var KEY=null, ready=false;
+  var IVB=ub64(CFG.ivb);
+  function ivOf(i){ var u=new Uint8Array(12); u.set(IVB,0); new DataView(u.buffer).setUint32(8,i>>>0); return u; }
+  var KEY=null;
+  var NOMSE=/[?&]nomse=1/.test(location.search);   // 测试用：强制走不支持 MSE 的路径
+  var MS=NOMSE?null:(window.ManagedMediaSource||window.MediaSource);
+  var useMSE=!!(MS&&MS.isTypeSupported&&MS.isTypeSupported(CFG.mime));
+
+  // ---------- 下载 + 解密（按顺序，最多 3 个并发）----------
+  var data=new Array(N+1), next=0, active=0, got=0, onSeg=[];
+  function pump(){
+    while(active<3 && next<=N){
+      (function(i){
+        active++;
+        var tries=0;
+        (function go(){
+          fetch('d/'+('00'+i).slice(-3)+'.bin').then(function(r){
+            if(!r.ok) throw new Error('http '+r.status); return r.arrayBuffer();
+          }).then(function(buf){
+            return crypto.subtle.decrypt({name:'AES-GCM',iv:ivOf(i)},KEY,buf);
+          }).then(function(plain){
+            data[i]=new Uint8Array(plain); got+=CFG.sizes[i]; active--;
+            onSeg.forEach(function(f){f(i);}); pump();
+          }).catch(function(){
+            if(++tries<4) setTimeout(go,800*tries);
+            else { active--; hint('网络不太好，请刷新重试'); }
+          });
+        })();
+      })(next++);
+    }
+  }
+  function readyCount(){ var k=0; while(k<=N && data[k]) k++; return k; }   // 连续到手的个数（含 init）
+  function durOf(m){ var s=0; for(var i=0;i<m;i++) s+=CFG.durs[i]; return s; }
+
+  // ---------- 播放 ----------
+  var started=false, wantPlay=false;
+  function tryPlay(){
+    var p=v.play();
+    if(p&&p.catch) p.catch(function(){ cover.classList.remove('hide'); hint('点一下就开始'); });
+  }
+
+  // 路径 A：MediaSource，一段段喂进去，无缝
+  function startMSE(){
+    var ms=new MS(), sb=null, appended=0;
+    if(window.ManagedMediaSource && MS===window.ManagedMediaSource) v.disableRemotePlayback=true;
+    v.src=URL.createObjectURL(ms);
+    ms.addEventListener('sourceopen',function(){
+      if(sb) return;
+      sb=ms.addSourceBuffer(CFG.mime);
+      try{ ms.duration=TOTAL; }catch(e){}
+      sb.addEventListener('updateend',feed);
+      sb.addEventListener('error',function(){ hint('视频出错了，请刷新重试'); });
+      feed();
+    });
+    function feed(){
+      if(!sb || sb.updating) return;
+      if(appended>N){ if(ms.readyState==='open'){ try{ms.endOfStream();}catch(e){} } return; }
+      if(!data[appended]) return;
+      var buf=data[appended]; appended++;
+      try{ sb.appendBuffer(buf); }catch(e){ appended--; setTimeout(feed,500); }
+    }
+    onSeg.push(feed);
+  }
+
+  // 路径 B：不支持 MediaSource（部分老 iPhone）：用已下载的前缀拼文件播放，快到头时换更长的
+  function startPrefix(){
+    var cur=0, url=null, switching=false;
+    var cv=document.createElement('canvas');
+    cv.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;background:#2a1c20';
+    v.parentNode.insertBefore(cv,v.nextSibling);
+    function setSrc(m,t,play){
+      switching=true;
+      try{ cv.width=v.videoWidth||960; cv.height=v.videoHeight||540; cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height); if(t>0) cv.style.display='block'; }catch(e){}
+      var old=url; url=URL.createObjectURL(new Blob(data.slice(0,m),{type:'video/mp4'})); cur=m;
+      v.src=url; v.load();
+      v.addEventListener('loadedmetadata',function h(){
+        v.removeEventListener('loadedmetadata',h);
+        if(t>0) try{ v.currentTime=t; }catch(e){}
+        if(play) tryPlay();
+        if(old) URL.revokeObjectURL(old);
+      });
+    }
+    v.addEventListener('playing',function(){ cv.style.display='none'; switching=false; });
+    v.addEventListener('canplay',function(){ switching=false; });
+    v.addEventListener('seeked',function(){ if(v.paused) cv.style.display='none'; });
+    var stuck=false, lastT=-1, still=0, waitData=false, resumeT=0;
+    var tip=document.createElement('div');
+    tip.textContent='正在加载…';
+    tip.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:8px 16px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff7f4;font-size:13px;letter-spacing:.1em;pointer-events:none;display:none';
+    v.parentNode.appendChild(tip);
+    window.__partial=true;
+    function check(){
+      var k=readyCount();
+      if(!cur){ if(k>=Math.min(3,N+1)){ setSrc(k,0,wantPlay); started=true; } return; }
+      if(switching || cur>=N+1) return;
+      var end=durOf(cur-1);   // 当前文件包含的时长
+      if(k<=cur){
+        // 下载没跟上：在当前文件末尾前先暂停等数据，别让它「播完」
+        if(!waitData && (v.ended || v.currentTime>end-0.3)){
+          waitData=true; resumeT=Math.min(v.currentTime,end); v.pause(); tip.style.display='block';
+        }
+        return;
+      }
+      // 快到当前文件末尾、已经播完、卡住不动或正在等数据，就换成更长的文件
+      if(waitData || v.ended || stuck || v.currentTime>end-2.5){
+        var t=waitData?resumeT:Math.min(v.currentTime,end), pl=waitData||!v.paused||v.ended||wantPlay;
+        stuck=false; waitData=false; tip.style.display='none';
+        if(k>=N+1) window.__partial=false;
+        setSrc(k,t,pl);
+      }
+    }
+    v.addEventListener('timeupdate',check);
+    v.addEventListener('ended',check);
+    v.addEventListener('waiting',function(){
+      if(readyCount()<=cur && cur<N+1) hint('正在加载…'); else { stuck=true; check(); }
+    });
+    // 看门狗：在播放状态但时间 1.5 秒没动，视为卡住
+    setInterval(function(){
+      if(!cur || v.paused || switching) { still=0; lastT=v.currentTime; return; }
+      if(Math.abs(v.currentTime-lastT)<0.01){ if(++still>=3){ still=0; stuck=true; check(); } } else still=0;
+      lastT=v.currentTime;
+    },500);
+    onSeg.push(check);
+  }
+
+  function progress(){
+    if(readyCount()>=Math.min(3,N+1)){ hint('约 4 分钟'); return; }
+    hint('正在加载 '+Math.min(99,Math.floor(got*100/(CFG.sizes[0]+CFG.sizes[1]+(CFG.sizes[2]||0))))+'%');
+  }
+
+  function startLoading(){
+    onSeg.push(progress); progress();
+    if(useMSE) startMSE(); else startPrefix();
+    pump();
+  }
 
   function deriveKey(val){
-    var enc=new TextEncoder();
-    return crypto.subtle.importKey('raw',enc.encode(val),{name:'PBKDF2'},false,['deriveKey'])
+    return crypto.subtle.importKey('raw',new TextEncoder().encode(val),{name:'PBKDF2'},false,['deriveKey'])
       .then(function(base){
         return crypto.subtle.deriveKey({name:'PBKDF2',salt:ub64(CFG.salt),iterations:CFG.iter,hash:'SHA-256'},
           base,{name:'AES-GCM',length:256},false,['decrypt']);
       });
   }
 
-  function loadVideo(){
-    hint('正在加载视频 0%');
-    fetch('video.enc',{cache:'force-cache'}).then(function(r){
-      if(!r.ok) throw new Error('http '+r.status);
-      var total=+r.headers.get('Content-Length')||0;
-      if(!r.body||!r.body.getReader) return r.arrayBuffer();
-      var rd=r.body.getReader(), parts=[], got=0;
-      return (function pump(){
-        return rd.read().then(function(x){
-          if(x.done){ var out=new Uint8Array(got),o=0; parts.forEach(function(p){out.set(p,o);o+=p.length;}); return out.buffer; }
-          parts.push(x.value); got+=x.value.length;
-          hint(total ? '正在加载视频 '+Math.min(99,Math.floor(got*100/total))+'%' : '正在加载视频 '+(got/1048576).toFixed(1)+' MB');
-          return pump();
-        });
-      })();
-    }).then(function(buf){
-      hint('马上就好…');
-      return crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(CFG.vidIv)},KEY,buf);
-    }).then(function(plain){
-      v.src=URL.createObjectURL(new Blob([plain],{type:'video/mp4'}));
-      v.load(); ready=true;
-      hint('约 4 分钟');
-    }).catch(function(){
-      hint('视频没加载出来，请检查网络后刷新重试');
-    });
-  }
-
   function unlock(){
-    // 全角数字转半角、去空格（手机中文输入法常见）
     var val=pw.value.replace(/[\uff10-\uff19]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xfee0);}).replace(/\s+/g,'');
     if(!val) return;
     if(!(window.crypto&&crypto.subtle)){ showErr('当前浏览器不支持，请用微信或手机浏览器打开'); return; }
     ok.disabled=true; err.classList.remove('show'); ok.textContent='验证中…';
     deriveKey(val).then(function(k){
-      return crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(CFG.chkIv)},k,ub64(CFG.chk)).then(function(){ return k; });
+      return crypto.subtle.decrypt({name:'AES-GCM',iv:ivOf(0xFFFFFFFF)},k,ub64(CFG.chk)).then(function(){ return k; });
     }).then(function(k){
       KEY=k; ok.textContent='开启';
       gate.style.display='none'; main.classList.add('on');
-      loadVideo();
+      startLoading();
     }).catch(function(){ ok.textContent='开启'; showErr(MSG_WRONG); });
   }
   ok.addEventListener('click',unlock);
   pw.addEventListener('keydown',function(e){if(e.key==='Enter')unlock();});
 
   function play(){
-    if(!ready) return;
+    wantPlay=true;
     cover.classList.add('hide'); v.controls=true;
-    var p=v.play(); if(p&&p.catch)p.catch(function(){});
+    if(!v.src){ cover.classList.remove('hide'); hint('马上就好…'); return; }
+    tryPlay();
   }
   cover.addEventListener('click',play);
   document.getElementById('playbtn').addEventListener('click',function(e){e.stopPropagation();play();});
   v.addEventListener('playing',function(){cover.classList.add('hide');});
-  v.addEventListener('ended',function(){cover.classList.remove('hide');});
-  v.addEventListener('error',function(){ if(ready) hint('视频播放出错，请刷新重试'); });
+  v.addEventListener('ended',function(){ if(window.__partial) return; cover.classList.remove('hide'); });
+  v.addEventListener('error',function(){ if(KEY) hint('视频出错了，请刷新重试'); });
 </script>
 </body>
 </html>
