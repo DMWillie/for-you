@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<title>给你 · 一段想说的话</title>
+<style>
+  :root{
+    --ink:#6b4a52; --rose:#c96b7f;
+    --shadow:0 18px 50px rgba(160,95,110,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;min-height:100%}
+  body{
+    font-family:"Songti SC","STSong","Noto Serif SC",serif;
+    color:var(--ink);
+    background:
+      radial-gradient(120% 70% at 50% -10%, #fff6ef 0%, rgba(255,246,239,0) 60%),
+      linear-gradient(165deg,#fdf5ef 0%,#f9e9ea 48%,#f6dfe4 100%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .petals{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+  .petal{position:absolute;top:-8vh;color:rgba(201,107,127,.35);font-size:14px;
+    animation:fall linear infinite;opacity:0}
+  @keyframes fall{
+    0%{transform:translateY(-8vh) rotate(0deg);opacity:0}
+    12%{opacity:.7} 88%{opacity:.5}
+    100%{transform:translateY(112vh) rotate(320deg);opacity:0}
+  }
+  .wrap{position:relative;z-index:1;max-width:680px;margin:0 auto;
+    padding:clamp(30px,7vw,64px) clamp(18px,5vw,34px) 46px;
+    display:flex;flex-direction:column;align-items:center;text-align:center}
+  .eyebrow{font-size:11px;letter-spacing:.42em;color:#c39aa2;
+    text-transform:uppercase;margin-bottom:20px;font-family:Georgia,serif}
+  h1{font-size:clamp(34px,9vw,52px);font-weight:400;letter-spacing:.16em;
+    margin:0 0 14px;color:#5e3b45;text-indent:.16em}
+  h1 .dot{color:var(--rose)}
+  .sub{font-size:clamp(14px,3.6vw,17px);letter-spacing:.12em;
+    color:#a07b84;margin:0 0 34px;line-height:1.9}
+  .rule{width:52px;height:1px;background:linear-gradient(90deg,transparent,#d8a8b2,transparent);margin:0 0 34px}
+
+  /* 密码门 */
+  #gate{width:100%;max-width:400px;background:rgba(255,252,249,.86);
+    border:1px solid rgba(214,164,175,.4);border-radius:22px;
+    padding:38px 28px 34px;box-shadow:var(--shadow);backdrop-filter:blur(8px)}
+  .lockheart{font-size:30px;color:#d98a9a;filter:drop-shadow(0 3px 10px rgba(214,138,154,.4));
+    animation:beat 2.4s ease-in-out infinite}
+  @keyframes beat{0%,100%{transform:scale(1)}25%{transform:scale(1.12)}50%{transform:scale(1)}}
+  .gate-t{font-size:19px;letter-spacing:.1em;color:#6b4a52;margin:16px 0 6px}
+  .gate-s{font-size:13px;letter-spacing:.06em;color:#b08d95;line-height:1.9;margin:0 0 24px}
+  .pwbox{display:flex;gap:10px;justify-content:center}
+  #pw{width:150px;padding:12px 14px;border:1px solid #e2c3ca;border-radius:12px;
+    background:#fffdfb;text-align:center;letter-spacing:.3em;font-size:18px;color:#6b4a52;
+    font-family:Georgia,serif;outline:none;transition:border-color .2s,box-shadow .2s}
+  #pw:focus{border-color:var(--rose);box-shadow:0 0 0 3px rgba(201,107,127,.14)}
+  /* 未输入时显示浅色提示文字，输入后才出现圆点 */
+  #pw:placeholder-shown{letter-spacing:.08em;font-size:15px;font-family:inherit}
+  #pw::placeholder{color:#c9aab1;opacity:1;letter-spacing:.08em}
+  #ok{padding:12px 22px;border:none;border-radius:12px;background:var(--rose);
+    color:#fff8f5;font-size:15px;letter-spacing:.1em;font-family:inherit;cursor:pointer;
+    box-shadow:0 8px 20px rgba(201,107,127,.28);transition:transform .15s,opacity .2s}
+  #ok:active{transform:scale(.96)}
+  #ok:disabled{opacity:.6;cursor:default}
+  #err{min-height:20px;margin:14px 0 0;font-size:13px;color:#c2576d;letter-spacing:.06em;opacity:0;transition:opacity .3s}
+  #err.show{opacity:1}
+  .gate-hint{margin:22px 0 0;font-size:12px;color:#c0a2a9;letter-spacing:.05em}
+
+  /* 主内容（解锁后显示） */
+  #main{display:none;width:100%;flex-direction:column;align-items:center}
+  #main.on{display:flex;animation:fadein 1s ease both}
+  @keyframes fadein{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .player{width:100%;border-radius:20px;overflow:hidden;position:relative;
+    background:#2a1c20;box-shadow:var(--shadow);aspect-ratio:16/9}
+  video{width:100%;height:100%;display:block;object-fit:contain;background:#2a1c20}
+  .cover{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px;cursor:pointer;
+    background:linear-gradient(160deg,rgba(74,44,52,.42),rgba(52,30,38,.62));
+    transition:opacity .5s ease}
+  .cover.hide{opacity:0;pointer-events:none}
+  .bigheart{font-size:34px;color:#ffd9e1;filter:drop-shadow(0 3px 12px rgba(255,150,175,.5));
+    animation:beat 2.4s ease-in-out infinite}
+  .playbtn{border:1px solid rgba(255,240,240,.85);color:#fff7f4;background:rgba(255,255,255,.10);
+    padding:12px 30px;border-radius:999px;font-size:15px;letter-spacing:.22em;
+    font-family:inherit;backdrop-filter:blur(4px)}
+  .hint{font-size:12px;color:rgba(255,240,240,.72);letter-spacing:.1em}
+  .note{margin:26px 0 0;font-size:13px;line-height:2;color:#a8838c;letter-spacing:.08em}
+  .note b{color:var(--rose);font-weight:400}
+  .quote{margin:34px 0 8px;font-size:clamp(16px,4.4vw,20px);
+    letter-spacing:.14em;color:#7c5560;line-height:2}
+  .sign{margin-top:18px;font-size:12px;color:#bb9aa2;letter-spacing:.2em}
+  .tail{margin-top:8px;font-size:12px;color:#c3a7ad;letter-spacing:.06em;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="petals" id="petals"></div>
+
+<div class="wrap">
+  <div class="eyebrow">A LITTLE CONFESSION</div>
+  <h1>给你 <span class="dot">♥</span></h1>
+  <p class="sub">有些话，想认真说给你听</p>
+  <div class="rule"></div>
+
+  <!-- 密码门 -->
+  <div id="gate">
+    <div class="lockheart">♥</div>
+    <div class="gate-t">这封信，上了锁</div>
+    <p class="gate-s">输入那个属于我们的数字<br>就能看到我想对你说的话</p>
+    <div class="pwbox">
+      <input id="pw" type="password" inputmode="numeric" maxlength="12"
+             placeholder="请输入密码" autocomplete="off" aria-label="密码">
+      <button id="ok">开启</button>
+    </div>
+    <p id="err">密码不太对，再试一次 ♥</p>
+    <p class="gate-hint">用微信扫码打开效果最好 · 建议戴上耳机</p>
+  </div>
+
+  <!-- 解锁后的内容 -->
+  <div id="main">
+    <div class="player">
+      <video id="v" playsinline webkit-playsinline x5-playsinline
+        x5-video-player-type="h5" x5-video-player-fullscreen="false"
+        preload="auto" poster="poster.jpg"></video>
+      <div class="cover" id="cover">
+        <div class="bigheart">♥</div>
+        <button class="playbtn" id="playbtn">点击播放</button>
+        <span class="hint">约 4 分钟</span>
+      </div>
+    </div>
+    <p class="note">如果画面没有自动播放，点一下上面的按钮就好<br>
+      微信里若无法播放，点右上角 <b>···</b> → <b>在浏览器打开</b></p>
+    <p class="quote">「等我回去吧」<br>「我爱你」</p>
+    <div class="sign">— 一直都在</div>
+    <div class="tail">本页面为私人分享链接，请勿转发</div>
+  </div>
+</div>
+
+<script>
+  // 漂浮光点
+  (function(){
+    var box=document.getElementById('petals'), chars=['♥','✦','·','❀'];
+    for(var i=0;i<16;i++){
+      var s=document.createElement('span'); s.className='petal';
+      s.textContent=chars[i%chars.length];
+      s.style.left=(Math.random()*100)+'%';
+      s.style.fontSize=(10+Math.random()*12)+'px';
+      s.style.animationDuration=(11+Math.random()*12)+'s';
+      s.style.animationDelay=(-Math.random()*16)+'s';
+      box.appendChild(s);
+    }
+  })();
+
+  var gate=document.getElementById('gate'), main=document.getElementById('main');
+  var pw=document.getElementById('pw'), ok=document.getElementById('ok'), err=document.getElementById('err');
+  var v=document.getElementById('v'), cover=document.getElementById('cover');
+
+  // —— 加密静态版（GitHub Pages）——
+  // 公开仓库里只有加密后的 video.enc；密码在浏览器里派生密钥、本地解密播放。
+  var CFG={"salt": "xGgc8LNyB4QJr8H9ErzOVg==", "iter": 150000, "chkIv": "lluQl2HoMsjDlWYu", "chk": "Cch7RalAhOMmjIywj/XJVrUvvx2xM9YLvA==", "vidIv": "y9oZuVE8dCY1f8y/"};
+  var MSG_WRONG='密码不太对，再试一次 ♥';
+  function showErr(msg){ err.textContent=msg; err.classList.add('show'); ok.disabled=false; pw.select(); }
+  function hint(t){ var h=document.querySelector('#cover .hint'); if(h) h.textContent=t; }
+  function ub64(s){ var b=atob(s),u=new Uint8Array(b.length); for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i); return u; }
+  var KEY=null, ready=false;
+
+  function deriveKey(val){
+    var enc=new TextEncoder();
+    return crypto.subtle.importKey('raw',enc.encode(val),{name:'PBKDF2'},false,['deriveKey'])
+      .then(function(base){
+        return crypto.subtle.deriveKey({name:'PBKDF2',salt:ub64(CFG.salt),iterations:CFG.iter,hash:'SHA-256'},
+          base,{name:'AES-GCM',length:256},false,['decrypt']);
+      });
+  }
+
+  function loadVideo(){
+    hint('正在加载视频 0%');
+    fetch('video.enc',{cache:'force-cache'}).then(function(r){
+      if(!r.ok) throw new Error('http '+r.status);
+      var total=+r.headers.get('Content-Length')||0;
+      if(!r.body||!r.body.getReader) return r.arrayBuffer();
+      var rd=r.body.getReader(), parts=[], got=0;
+      return (function pump(){
+        return rd.read().then(function(x){
+          if(x.done){ var out=new Uint8Array(got),o=0; parts.forEach(function(p){out.set(p,o);o+=p.length;}); return out.buffer; }
+          parts.push(x.value); got+=x.value.length;
+          hint(total ? '正在加载视频 '+Math.min(99,Math.floor(got*100/total))+'%' : '正在加载视频 '+(got/1048576).toFixed(1)+' MB');
+          return pump();
+        });
+      })();
+    }).then(function(buf){
+      hint('马上就好…');
+      return crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(CFG.vidIv)},KEY,buf);
+    }).then(function(plain){
+      v.src=URL.createObjectURL(new Blob([plain],{type:'video/mp4'}));
+      v.load(); ready=true;
+      hint('约 4 分钟');
+    }).catch(function(){
+      hint('视频没加载出来，请检查网络后刷新重试');
+    });
+  }
+
+  function unlock(){
+    // 全角数字转半角、去空格（手机中文输入法常见）
+    var val=pw.value.replace(/[\uff10-\uff19]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xfee0);}).replace(/\s+/g,'');
+    if(!val) return;
+    if(!(window.crypto&&crypto.subtle)){ showErr('当前浏览器不支持，请用微信或手机浏览器打开'); return; }
+    ok.disabled=true; err.classList.remove('show'); ok.textContent='验证中…';
+    deriveKey(val).then(function(k){
+      return crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(CFG.chkIv)},k,ub64(CFG.chk)).then(function(){ return k; });
+    }).then(function(k){
+      KEY=k; ok.textContent='开启';
+      gate.style.display='none'; main.classList.add('on');
+      loadVideo();
+    }).catch(function(){ ok.textContent='开启'; showErr(MSG_WRONG); });
+  }
+  ok.addEventListener('click',unlock);
+  pw.addEventListener('keydown',function(e){if(e.key==='Enter')unlock();});
+
+  function play(){
+    if(!ready) return;
+    cover.classList.add('hide'); v.controls=true;
+    var p=v.play(); if(p&&p.catch)p.catch(function(){});
+  }
+  cover.addEventListener('click',play);
+  document.getElementById('playbtn').addEventListener('click',function(e){e.stopPropagation();play();});
+  v.addEventListener('playing',function(){cover.classList.add('hide');});
+  v.addEventListener('ended',function(){cover.classList.remove('hide');});
+  v.addEventListener('error',function(){ if(ready) hint('视频播放出错，请刷新重试'); });
+</script>
+</body>
+</html>
